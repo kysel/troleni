@@ -1,8 +1,8 @@
 #ifndef KUBAS_FORMAT
 #define KUBAS_FORMAT
 
-#ifndef KUBAS_DEFAULT_STRING_SIZE
-#define KUBAS_DEFAULT_STRING_SIZE 32
+#ifndef KUBAS_STRING_SIZE
+#define KUBAS_STRING_SIZE 32
 #endif
 
 #ifndef KUBAS_NUMBER_2_STRING_CHARSET
@@ -13,17 +13,17 @@
 #define NULL 0
 #endif
 
-namespace avrlib {
+namespace kubas {
 
 template <typename Integer>
 bool number2string (Integer n, char *s, uint8_t align = 0,
 	uint8_t base = 10, char fill = ' ',
-	uint8_t division = KUBAS_DEFAULT_STRING_SIZE, char separator = ' ',
+	uint8_t division = KUBAS_STRING_SIZE, char separator = ' ',
 	bool Minus = true)
 {
 	char charset[] = KUBAS_NUMBER_2_STRING_CHARSET;
-	char buf[KUBAS_DEFAULT_STRING_SIZE];
-	uint8_t i = 0;
+	char buf[KUBAS_STRING_SIZE];
+	int8_t i = 0;
 	bool negative = false;
 	uint8_t division_counter = division;
 	if(n == 0)
@@ -37,7 +37,7 @@ bool number2string (Integer n, char *s, uint8_t align = 0,
 		}
 		for(; n != 0; n /= base)
 		{
-			if(i == (KUBAS_DEFAULT_STRING_SIZE-2))
+			if(i == (KUBAS_STRING_SIZE-2))
 				return false;
 			buf[i++] = charset[n % base];
 			if(--division_counter == 0)
@@ -74,7 +74,7 @@ bool number2string (Integer n, char *s, uint8_t align = 0,
 		++i;
 	}
 	uint8_t j = 0;
-	for(--i; i != 255; --i)
+	for(--i; i >= 0; --i)
 		s[j++] = buf[i];
 	s[j] = NULL;
 	return true;
@@ -84,13 +84,13 @@ bool number2string (Integer n, char *s, uint8_t align = 0,
 template <typename Integer>
 bool number2string (Integer n, string &s, uint8_t align = 0,
 	uint8_t base = 10, char fill = ' ',
-	uint8_t division = KUBAS_DEFAULT_STRING_SIZE, char separator = ' ',
+	uint8_t division = KUBAS_STRING_SIZE, char separator = ' ',
 	bool Minus = true)
 {
 	char charset[] = KUBAS_NUMBER_2_STRING_CHARSET;
-	char buf[KUBAS_DEFAULT_STRING_SIZE];
-	uint8_t i = 0;
-	s.clear();
+	char buf[KUBAS_STRING_SIZE];
+	int8_t i = 0;
+	s = "";
 	bool negative = false;
 	uint8_t division_counter = division;
 	if(n == 0)
@@ -104,7 +104,7 @@ bool number2string (Integer n, string &s, uint8_t align = 0,
 		}
 		for(; n != 0; n /= base)
 		{
-			if(i == (KUBAS_DEFAULT_STRING_SIZE-2))
+			if(i == (KUBAS_STRING_SIZE-2))
 				return false;
 			buf[i++] = charset[n % base];
 			if(--division_counter == 0)
@@ -117,6 +117,8 @@ bool number2string (Integer n, string &s, uint8_t align = 0,
 	if(Minus && negative)
 		buf[i++] = '-';
 	++division_counter;
+//	if(align%2 != 0)
+//		--align;
 	while(i < align)
 	{
 		if(--division_counter != 0)
@@ -138,8 +140,10 @@ bool number2string (Integer n, string &s, uint8_t align = 0,
 				buf[--i] = fill;
 		++i;
 	}
-	for(--i; i != 255; --i)
-		s += buf[i];
+	uint8_t j = 0;
+	for(--i; i >= 0; --i)
+		s[j++] = buf[i];
+	s[j] = NULL;
 	return true;
 }
 
@@ -148,7 +152,7 @@ bool string2number(const string &s, Integer &res)
 {
 	bool isNegative = s[0]=='-';
 	Integer n = 0;
-	for(uint8_t i = isNegative?1:0; i != s.length(); ++i)
+	for(uint8_t i = isNegative?1:0; s[i] != 0; ++i)
 	{
 		if(s[i]<'0' || s[i]>'9')
 			return false;
@@ -160,7 +164,6 @@ bool string2number(const string &s, Integer &res)
 	return true;
 }
 #endif
-
 class format_t {
 
 	uint8_t Align;
@@ -193,7 +196,7 @@ public:
 		Base = 10;
 		Fill = ' ';
 		Minus = true;
-		Division = KUBAS_DEFAULT_STRING_SIZE;
+		Division = KUBAS_STRING_SIZE;
 		Separator = ' ';
 		//getTimeout = 0;
 	}
@@ -220,7 +223,7 @@ public:
 	template <typename Integer>
 	void send_number_immediately (Integer n, uint8_t base = 0)
 	{
-		char buf[KUBAS_DEFAULT_STRING_SIZE];
+		char buf[KUBAS_STRING_SIZE];
 		number2string(n, buf, Align, base==0?Base:base, Fill, Division, Separator, Minus);
 		send_immediately(buf);
 	}
@@ -252,7 +255,7 @@ public:
 	template <typename Integer>
 	format_t &operator << (Integer n)
 	{
-		char buf[KUBAS_DEFAULT_STRING_SIZE];
+		char buf[KUBAS_STRING_SIZE];
 		number2string(n, buf, Align, Base, Fill, Division, Separator, Minus);
 		send(buf);
 		return *this;
@@ -265,7 +268,7 @@ public:
 #ifdef KUBAS_STRING
 	format_t &operator << (const string &str)
 	{
-		for(uint8_t i = 0; i != str.length(); ++i)
+		for(uint8_t i = 0; str[i] != 0; ++i)
 			rs232.send_char(str[i]);
 		return *this;
 	}
@@ -292,6 +295,7 @@ public:
 #ifdef KUBAS_STRING
 	format_t &operator >> (string &str)
 	{
+		str.clear();
 		if(cin_isFirst)
 		{
 			char ch = rs232.get();
@@ -300,10 +304,10 @@ public:
 			{
 				if(ch == 8)
 				{
-					if(cin_buf.length() != 0)
+					if(cin_buf.get_pointer() != 0)
 					{
 						rs232.send_char(ch);
-						cin_buf.erase(cin_buf.length()-1, 1);
+						--cin_buf;
 					}
 					else
 						rs232.send_char('\a');
@@ -311,7 +315,7 @@ public:
 				else
 				{
 					cin_buf += ch;
-					if(cin_buf.length() == cin_buf.max_size())
+					if(cin_buf.get_pointer() == cin_buf.size())
 						rs232.send_char('\a');
 					else
 						rs232.send_char(ch);
@@ -321,13 +325,37 @@ public:
 			send(endl);
 			cin_isFirst = false;
 		}
-		uint8_t i = cin_buf.find(' ');
-		if (i == ((uint8_t)npos))
+		uint8_t i;
+		for(i = 0; (cin_buf[i] != ' ') && (cin_buf[i] != 0); ++i)
+			str[i] = cin_buf[i];
+		if(cin_buf[i++] == 0)
 			cin_isFirst = true;
-		str = cin_buf.substr(0, i);
-		cin_buf.erase(0, i + 1);
+		else
+		{
+			uint8_t j;
+			for(j = 0; cin_buf[i+j] != 0; ++j)
+				cin_buf[j] = cin_buf[i+j];
+			cin_buf[j] = 0;
+		}
+		str[i] = 0;
 		return *this;
 	}
+	/*int32_t getNumber(const string &s)
+	{
+		int32_t n = 0;
+		uint32_t rank = 1;
+		for(int8_t p = rs232.getPointer()-2;p != -1; --p)
+		{
+			if(s[p]>='0' && s[p]<='9')
+				n += rank * (s[p]-'0');
+			else if(p == 0 && s[p] == '-')
+				n = -n;
+			else
+				return GETNUMBER_FAILURE_RETURN_VALUE;//-(1<<31)+1
+			rank *= 10;
+		}
+		return n;
+	}*/
 	format_t &operator >> (uint8_t & n)
 	{
 		string s;
@@ -376,7 +404,7 @@ public:
 	void clear()
 	{
 		cin_isGood = true;
-		cin_buf.clear();
+		cin_buf = "";
 		cin_isFirst = true;
 	}
 

@@ -1,25 +1,7 @@
 #ifndef RS232NEW_BASIC
 #define RS232NEW_BASIC
 
-/*
-toto:
-#ifdef RS485_CTRL_PIN
-RS485_CTRL_PIN::set();
-#endif
-
-nahrazeno tímto: 
- PORTD |= (1<<PD2) 
-
-toto:
-#ifdef RS485_CTRL_PIN
-RS485_CTRL_PIN::clear();
-#endif
-
-nahrazeno tímto:
-PORTD &= ~(1<<PD2)
-
-*/
-namespace avrlib
+namespace kubas
 {
 
 #ifndef RS232_RX_BUF
@@ -111,6 +93,7 @@ namespace avrlib
 		"ijmp" \
 		)
 #endif
+
 class rs232_t {
 
 #ifndef RS232_EXTERN_RX_INT
@@ -129,7 +112,7 @@ public:
 
 	bool data_out(char &ch)
 	{
-		if(m_tx.empty())
+		if(m_tx.is_empty())
 			return false;
 		ch = m_tx.pop();
 		return true;
@@ -137,11 +120,11 @@ public:
 
 	inline bool is_send()
 	{
-		return m_tx.empty();
+		return m_tx.is_empty();
 	}
 
 #if ((defined (__AVR_ATmega16__))||(defined (__AVR_ATmega32__)))
-	uint32_t init(uint32_t speed)
+	void init(uint32_t speed)
 	{
 		UCSRA = (1<<U2X);
 		UCSRB = ((1<<RXCIE)|(1<<RXEN)|(1<<TXEN));
@@ -149,42 +132,36 @@ public:
 		speed = (((F_CPU/(float(8*speed)))-1)-((F_CPU/(8*speed))-1))<0.5?((F_CPU/(8*speed))-1):((F_CPU/(8*speed)));
 		UBRRH = ((speed&0xFF00)>>8);
 		UBRRL = (speed&0x00FF);
-		
-				/* rs485 */	UCSRB |= (1<<TXCIE);
-				
 #ifdef RS485_CTRL_PIN
 		RS485_CTRL_PIN::output(true);
 		RS485_CTRL_PIN::clear();
 		UCSRB |= (1<<TXCIE);
 #endif
- PORTD &= ~(1<<PD2); /* Shození RS485 */
-
-		return F_CPU/(float)(8*(((UBRRH<<8)|UBRRL)+1));
 	}
 	void send_char(char data)
 	{
 		while(!m_tx.push(data)) {}
- PORTD |= (1<<PD2); /* Nahození RS485 */
+#ifdef RS485_CTRL_PIN
+		RS485_CTRL_PIN::set();
+#endif
 		UCSRB |= (1<<UDRIE);
-	}
-	
-	bool is_recv()
-	{
-		return !m_rx.empty();
 	}
 	
 	void send_char_immediately(char data)
 	{
- PORTD |= (1<<PD2); /* Nahození RS485 */
+#ifdef RS485_CTRL_PIN
+		RS485_CTRL_PIN::set();
+#endif
 		UCSRA |= (1<<TXC);
 		UDR = data;
 		while((UCSRA & (1<<TXC)) == 0){}
- PORTD &= ~(1<<PD2); /* Shození RS485 */
-
+#ifdef RS485_CTRL_PIN
+		RS485_CTRL_PIN::clear();
+#endif
 	}
 #elif ((defined _AVR_IOMX8_H_)||(defined (__AVR_ATmega128__))||(defined (_AVR_IOM1284P_H_)))
 //#if _AVR_IOMX8_H_ == 1
-	uint32_t init(uint32_t speed)
+	void init(uint32_t speed)
 	{
 #if ((defined _AVR_IOMX8_H_)&&(defined BOOTLOADER_EXTERN_WDT))
 		if((MCUSR & (1<<WDRF))!=0)
@@ -207,11 +184,13 @@ public:
 		RS485_CTRL_PIN::clear();
 		UCSR0B |= (1<<TXCIE0);
 #endif
-		return F_CPU/((float)(8*(((UBRR0H<<8)|UBRR0L)+1)));
 	}
 	void send_char(char data)
 	{
 		while(!m_tx.push(data)) {}
+#ifdef RS485_CTRL_PIN
+		RS485_CTRL_PIN::set();
+#endif
 		UCSR0B |= (1<<UDRIE0);
 	}
 
@@ -230,17 +209,13 @@ public:
 #endif
 	void wait()
 	{
-		while(!m_tx.empty()) {}
+		while(!m_tx.is_empty()) {}
 	}
 
-	void clear()
-	{
-		m_rx.clear();
-	}
 #ifndef RS232_EXTERN_RX_INT
 	bool peek(char & data)
 	{
-		if(m_rx.empty())
+		if(m_rx.is_empty())
 			return false;
 		data = m_rx.pop();
 		return true;
@@ -291,8 +266,7 @@ ISR(USART_RXC_vect)
 		state = 0;
 #endif
 }
-#endif RS232_EXTERN_RX_INT
-
+#endif//RS232_EXTERN_RX_INT
 ISR(USART_UDRE_vect)
 {
 	char data;
@@ -301,14 +275,13 @@ ISR(USART_UDRE_vect)
 	else
 		UCSRB &= ~(1<<UDRIE);
 }
-//#ifdef RS485_CTRL_PIN
+#ifdef RS485_CTRL_PIN
 ISR(USART_TXC_vect)
-{	
-	//RS485_CTRL_PIN::clear();
-	PORTD &= ~(1<<PD2); /* Shození RS485 */
+{
+	RS485_CTRL_PIN::clear();
 }
-//#endif RS485_CTRL_PIN
-/*#elif ((defined _AVR_IOMX8_H_)||(defined(__AVR_ATmega128__))||(defined (_AVR_IOM1284P_H_)))
+#endif //RS485_CTRL_PIN
+#elif ((defined _AVR_IOMX8_H_)||(defined(__AVR_ATmega128__))||(defined (_AVR_IOM1284P_H_)))
 //#if _AVR_IOMX8_H_ == 1
 #ifndef RS232_EXTERN_RX_INT
 #if ((defined(__AVR_ATmega128__))||(defined (_AVR_IOM1284P_H_)))
@@ -365,8 +338,8 @@ ISR(USART_RX_vect)
 #endif
 #endif
 }
-#endif//RS232_EXTERN_RX_INT*/
-/*#if ((defined(__AVR_ATmega128__))||(defined (_AVR_IOM1284P_H_)))
+#endif//RS232_EXTERN_RX_INT
+#if ((defined(__AVR_ATmega128__))||(defined (_AVR_IOM1284P_H_)))
 ISR(USART0_UDRE_vect)
 #else
 ISR(USART_UDRE_vect)
@@ -377,7 +350,7 @@ ISR(USART_UDRE_vect)
 		UDR0 = data;
 	else
 		UCSR0B &= ~(1<<UDRIE0);
-}*/
+}
 #ifdef RS485_CTRL_PIN
 #if ((defined(__AVR_ATmega128__))||(defined (_AVR_IOM1284P_H_)))
 ISR(USART0_TX_vect)
@@ -407,7 +380,7 @@ public:
 
 	bool data_out(char &ch)
 	{
-		if(m_tx.empty())
+		if(m_tx.is_empty())
 			return false;
 		ch = m_tx.pop();
 		return true;
@@ -415,15 +388,10 @@ public:
 
 	inline bool is_send()
 	{
-		return m_tx.empty();
-	}
-	
-	bool is_recv()
-	{
-		return m_rx.empty();
+		return m_tx.is_empty();
 	}
 
-	uint32_t init(uint32_t speed)
+	void init(uint32_t speed)
 	{
 		UCSR1A = (1<<U2X1);
 		UCSR1B = ((1<<RXCIE1)|(1<<RXEN1)|(1<<TXEN1));
@@ -437,7 +405,6 @@ public:
 		RS4851_CTRL_PIN::clear();
 		UCSR1B |= (1<<TXCIE1);
 #endif
-		return F_CPU/((float)(8*(((UBRR1H<<8)|UBRR1L)+1)));
 	}
 	void send_char(char data)
 	{
@@ -463,12 +430,12 @@ public:
 	}
 	void wait()
 	{
-		while(!m_tx.empty()) {}
+		while(!m_tx.is_empty()) {}
 	}
 
 	bool peek(char & data)
 	{
-		if(m_rx.empty())
+		if(m_rx.is_empty())
 			return false;
 		data = m_rx.pop();
 		return true;
